@@ -6,9 +6,9 @@ uav_params={
     'mass': 1.5,                                # mass of the UAV [kg]
     'inertia': np.diag([0.03, 0.03, 0.05]),     # inertia matrix [kg*m^2]
     'arm_length': 0.2,                          # distance from center to motor [m]
-    'max_thrust': 15.0,                         # maximum thrust per motor [N]
-    'max_torque': 0.1,                          # maximum torque per motor [N*m]
-    'ct': 10.0,                                  # thrust coefficient
+    'max_thrust': 150.0,                         # maximum thrust per motor [N]
+    'max_torque': 1.0,                          # maximum torque per motor [N*m]
+    'ct': 50.0,                                  # thrust coefficient
     'cm' : 1.0                                  # moment coefficient
 }
 
@@ -101,7 +101,7 @@ def uav_update(t, x, u, params):
         moment_arm = motor_positions[i]
         Mm_B += np.cross(moment_arm, thrust) + np.array([0, 0, spin_dir[i]*cm*u[i]])
 
-    print(np.shape(x))
+    # print(np.shape(x))
 
     return np.array([vel_I, eul_dot, T_I, Mm_B]).flatten()
 
@@ -121,11 +121,11 @@ drone = ct.nlsys(uav_update, uav_output, states=12, name='Quadrotor UAV', inputs
 # --- Parametry symulacji ---
 
 dt = 0.01
-T = 10.0
+T = 5.0
 steps = int(T / dt)
 time = np.linspace(0, T, steps)
 reference_eul = np.array([0.0, 0.0, 0.0]) # desired roll, pitch, yaw
-reference_pos = np.array([0.0, 0.0, -8.0]) # desired x, y, z position
+reference_pos = np.array([0.0, 0.0, -2.0]) # desired x, y, z position
 
 Kp, Ki, Kd = 105.0, 0.4, 10.0  # PID gains for altitude control
 integral = np.array([0.0, 0.0, 0.0])
@@ -154,11 +154,14 @@ for t in time:
     px = x[0]
     py = x[1]
     pz = x[2]
+    vx = x[6]
+    vy = x[7]
+    vz = x[8]
 
-    error_eul = reference_eul - np.array([roll, pitch, yaw])
-    integral += error_eul * dt
-    derivative = (error_eul - prev_error_eul) / dt
-    prev_error_eul = error_eul
+    # error_eul = reference_eul - np.array([roll, pitch, yaw])
+    # integral += error_eul * dt
+    # derivative = (error_eul - prev_error_eul) / dt
+    # prev_error_eul = error_eul
 
     error_pos = reference_pos - np.array([px, py, pz])
     integral += error_pos * dt
@@ -166,13 +169,16 @@ for t in time:
     prev_error_pos = error_pos 
 
     # PIDR
-    pidr = Kp * error_eul[0] + Ki * integral[0] + Kd * derivative[0]
+    # pidr = Kp * error_eul[0] + Ki * integral[0] + Kd * derivative[0]
 
     # PIDT
     pidt = Kp * error_pos[2] + Ki * integral[2] + Kd * derivative[2]
 
     # każdy silnik dostaje tyle samo
     u = np.clip(np.ones(4) * pidt / 4, 0, uav_params['max_thrust'])
+
+    # print(x)
+    # print(u)
 
     # RK4 integrator
     k1 = uav_update(t, x, u, uav_params)
@@ -183,6 +189,8 @@ for t in time:
 
     pz_history.append(pz)
     u_history.append(pidt)
+
+    print(f"Czas: {t:.2f} s, Wysokość: {pz:.2f} m, Prędkość: {vz:.2f} m/s, Sterowanie: {pidt:.2f} N")
 
 
 # --- Wizualizacja ---
